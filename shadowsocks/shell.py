@@ -142,6 +142,7 @@ def get_config(is_local):
     try:
         config_path = find_config()
         optlist, args = getopt.getopt(sys.argv[1:], shortopts, longopts)
+        # 先解析命令行设置的配置文件，命令行优先级比较大，会覆盖配置文件
         for key, value in optlist:
             if key == '-c':
                 config_path = value

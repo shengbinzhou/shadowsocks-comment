@@ -65,6 +65,7 @@ def main():
 
     port_password = config['port_password']
     del config['port_password']
+    # 不同端口监听
     for port, password in port_password.items():
         a_config = config.copy()
         a_config['server_port'] = int(port)
@@ -79,15 +80,18 @@ def main():
             logging.warn('received SIGQUIT, doing graceful shutting down..')
             list(map(lambda s: s.close(next_tick=True),
                      tcp_servers + udp_servers))
+        # 收到SIGQUIT信号，关闭所有监听端口
         signal.signal(getattr(signal, 'SIGQUIT', signal.SIGTERM),
                       child_handler)
 
         def int_handler(signum, _):
             sys.exit(1)
+        # 收到SIGINT直接退出
         signal.signal(signal.SIGINT, int_handler)
 
         try:
             loop = eventloop.EventLoop()
+            # 与loop关联
             dns_resolver.add_to_loop(loop)
             list(map(lambda s: s.add_to_loop(loop), tcp_servers + udp_servers))
 
@@ -97,21 +101,25 @@ def main():
             shell.print_exception(e)
             sys.exit(1)
 
+	# 多进程模式
     if int(config['workers']) > 1:
         if os.name == 'posix':
             children = []
             is_child = False
             for i in range(0, int(config['workers'])):
                 r = os.fork()
+                # 子进程跑
                 if r == 0:
                     logging.info('worker started')
                     is_child = True
                     run_server()
                     break
                 else:
-                    children.append(r)
+                    children.append(r) # 添加到父进程
             if not is_child:
+            	# 父进程跑下来
                 def handler(signum, _):
+                	# 主进程收到中断，杀死所有子进程
                     for pid in children:
                         try:
                             os.kill(pid, signum)
@@ -129,14 +137,14 @@ def main():
                 for a_udp_server in udp_servers:
                     a_udp_server.close()
                 dns_resolver.close()
-
+				# 等待所有子进程结束
                 for child in children:
                     os.waitpid(child, 0)
         else:
             logging.warn('worker is only available on Unix/Linux')
             run_server()
     else:
-        run_server()
+        run_server() # 单进程跑
 
 
 if __name__ == '__main__':

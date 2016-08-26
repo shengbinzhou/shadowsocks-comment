@@ -26,7 +26,7 @@ import time
 from shadowsocks import common, shell
 
 # this module is ported from ShadowVPN daemon.c
-
+# 以守护进程方式运行，代码模块化，可以直接拿走去用
 
 def daemon_exec(config):
     if 'daemon' in config:

@@ -31,7 +31,8 @@ from collections import defaultdict
 
 from shadowsocks import shell
 
-
+# 事件循环，没什么好解释的，和libevent同一套东西
+# 接口包装，select和epoll两套统一接口
 __all__ = ['EventLoop', 'POLL_NULL', 'POLL_IN', 'POLL_OUT', 'POLL_ERR',
            'POLL_HUP', 'POLL_NVAL', 'EVENT_NAMES']
 
@@ -207,7 +208,7 @@ class EventLoop(object):
                     import traceback
                     traceback.print_exc()
                     continue
-
+			# 开始回调
             for sock, fd, event in events:
                 handler = self._fdmap.get(fd, None)
                 if handler is not None:
@@ -216,6 +217,7 @@ class EventLoop(object):
                         handler.handle_event(sock, fd, event)
                     except (OSError, IOError) as e:
                         shell.print_exception(e)
+            # 回调定时任务
             now = time.time()
             if asap or now - self._last_time >= TIMEOUT_PRECISION:
                 for callback in self._periodic_callbacks:
