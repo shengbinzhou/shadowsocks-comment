@@ -53,7 +53,8 @@ def compat_chr(d):
         return _chr(d)
     return bytes([d])
 
-
+# ord 将ascii转为整数  chr将整数转为ascii
+# 打补丁后ord既可接收整数也可以接收字符，chr
 _ord = ord
 _chr = chr
 ord = compat_ord
@@ -166,6 +167,7 @@ def parse_header(data):
     dest_port = None
     header_length = 0
     if addrtype & ADDRTYPE_MASK == ADDRTYPE_IPV4:
+    	# 数据格式 addrtype:1|dest_addr:4|dest_port|2
         if len(data) >= 7:
             dest_addr = socket.inet_ntoa(data[1:5])
             dest_port = struct.unpack('>H', data[5:7])[0]
@@ -173,6 +175,9 @@ def parse_header(data):
         else:
             logging.warn('header is too short')
     elif addrtype & ADDRTYPE_MASK == ADDRTYPE_HOST:
+    	# 数据格式 addrtype:1|addrlen:1|dest_addr:addrlen|dest_port:2
+    	# 带主机名hostname，因为是不定长用一个字节表示hostname长度
+    	# 上面数据长度为header_length = 4+addrlen
         if len(data) > 2:
             addrlen = ord(data[1])
             if len(data) >= 4 + addrlen:
@@ -185,6 +190,7 @@ def parse_header(data):
         else:
             logging.warn('header is too short')
     elif addrtype & ADDRTYPE_MASK == ADDRTYPE_IPV6:
+    	# 数据格式 addrtype:1|dest_addr:16|dest_port:2
         if len(data) >= 19:
             dest_addr = socket.inet_ntop(socket.AF_INET6, data[1:17])
             dest_port = struct.unpack('>H', data[17:19])[0]
@@ -300,3 +306,4 @@ if __name__ == '__main__':
     test_parse_header()
     test_pack_header()
     test_ip_network()
+
