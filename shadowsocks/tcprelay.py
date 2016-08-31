@@ -281,6 +281,7 @@ class TCPRelayHandler(object):
                 self._loop.add(remote_sock, eventloop.POLL_ERR, self._server)
                 data = b''.join(self._data_to_write_to_remote)
                 l = len(data)
+                # tcp 直接sendto
                 s = remote_sock.sendto(data, MSG_FASTOPEN,
                                        self._chosen_server)
                 if s < l:
@@ -310,22 +311,25 @@ class TCPRelayHandler(object):
                 if cmd == CMD_UDP_ASSOCIATE:
                     logging.debug('UDP associate')
                     if self._local_sock.family == socket.AF_INET6:
+                        # 0x4 ipv6
                         header = b'\x05\x00\x00\x04'
                     else:
+                        # 0x1 ipv4
                         header = b'\x05\x00\x00\x01'
                     addr, port = self._local_sock.getsockname()[:2]
                     addr_to_send = socket.inet_pton(self._local_sock.family,
                                                     addr)
                     port_to_send = struct.pack('>H', port)
-                    # 响应 CMD_UDP_ASSOCIATE 命令
+                    # 响应 CMD_UDP_ASSOCIATE 命令，告诉客户端udp地址
                     self._write_to_sock(header + addr_to_send + port_to_send,
                                         self._local_sock)
                     self._stage = STAGE_UDP_ASSOC
                     # just wait for the client to disconnect
+                    # 这里已经返回
                     return
                 elif cmd == CMD_CONNECT:
                     # just trim VER CMD RSV
-                    # 跨过socks5前面3字节
+                    # 跨过socks5前面3字节，后面字节与socks5兼容，不过在addrtype字段加入了ota验证
                     data = data[3:]
                 else:
                     # bing命令？
@@ -333,6 +337,7 @@ class TCPRelayHandler(object):
                     self.destroy()
                     return
             # 服务器端初始时候解析包头，下面也是socks5请求时从第三个字节开始的地址数据
+            # 这里ssserver刚好兼容剩下的socks5的请求头
             header_result = parse_header(data)
             if header_result is None:
                 raise Exception('can not parse header')
@@ -349,7 +354,7 @@ class TCPRelayHandler(object):
                         logging.warn('one time auth header is too short')
                         return None
                     offset = header_length + ONETIMEAUTH_BYTES
-                    # header后的一段hash值
+                    # header后的一段hash值, 10字节
                     _hash = data[header_length: offset]
                     _data = data[:header_length]
                     # iv+key
@@ -361,24 +366,30 @@ class TCPRelayHandler(object):
                         return
                     header_length += ONETIMEAUTH_BYTES
             self._remote_address = (common.to_str(remote_addr), remote_port)
-            # pause reading
+            # pause reading 上送数据
             self._update_stream(STREAM_UP, WAIT_STATUS_WRITING)
             self._stage = STAGE_DNS
             if self._is_local:
                 # 客户端
                 # forward address to remote
+                # 告诉浏览器，socks5验证成功
                 self._write_to_sock((b'\x05\x00\x00\x01'
                                      b'\x00\x00\x00\x00\x10\x10'),
                                     self._local_sock)
                 # spec https://shadowsocks.org/en/spec/one-time-auth.html
                 # ATYP & 0x10 == 1, then OTA is enabled.
                 if self._ota_enable:
+                    # 自己实现的ota，在浏览器之类发来的socks5请求头部的addrtype中加入ADDRTYPE_AUTH
+                    # 然后发往ssserver，修改第一字节，实际是socks5头部的第3字节
                     data = common.chr(addrtype | ADDRTYPE_AUTH) + data[1:]
                     key = self._encryptor.cipher_iv + self._encryptor.key
+                    # 附在数据尾部? 这里的data是socks5请求报文第三字节之后的数据
                     data += onetimeauth_gen(data, key)
+                # 加密
                 data_to_send = self._encryptor.encrypt(data)
                 self._data_to_write_to_remote.append(data_to_send)
                 # notice here may go into _handle_dns_resolved directly
+                # 选择一个ssserver发送数据
                 self._dns_resolver.resolve(self._chosen_server[0],
                                            self._handle_dns_resolved)
             else:
@@ -429,9 +440,11 @@ class TCPRelayHandler(object):
                 self._stage = STAGE_CONNECTING
                 remote_addr = ip
                 if self._is_local:
+                    # sslocal得到ssserver的端口
                     remote_port = self._chosen_server[1]
                 else:
-                    remote_port = self._remote_address[1] # 服务器得到远程端要连接的端口
+                    # 服务器得到远程端要连接的端口
+                    remote_port = self._remote_address[1]
 
                 if self._is_local and self._config['fast_open']:
                     # for fastopen:
@@ -549,6 +562,7 @@ class TCPRelayHandler(object):
 
     def _handle_stage_init(self, data):
         try:
+            # 与SOCKS5服务器（sslocal）的TCP连接后客户端需要先发送请求来协商版本及认证方式
             self._check_auth_method(data)
         except BadSocksHeader:
             self.destroy()
