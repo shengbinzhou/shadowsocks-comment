@@ -45,6 +45,7 @@ def try_cipher(key, method=None):
 
 
 def EVP_BytesToKey(password, key_len, iv_len):
+    # 生成key 和 iv
     # equivalent to OpenSSL's EVP_BytesToKey() with count 1
     # so that we make the same key and iv as nodejs version
     cached_key = '%s-%d-%d' % (password, key_len, iv_len)
@@ -95,6 +96,7 @@ class Encryptor(object):
         return len(self.cipher_iv)
 
     def get_cipher(self, password, method, op, iv):
+        # iv 是随机值 os.urandom
         password = common.to_bytes(password)
         m = self._method_info
         if m[0] > 0:
@@ -103,15 +105,19 @@ class Encryptor(object):
             # key_length == 0 indicates we should use the key directly
             key, iv = password, b''
         self.key = key
+        # 长度不够也没问题
         iv = iv[:m[1]]
         if op == 1:
+            # ope 1 表示iv用于加密
             # this iv is for cipher not decipher
+            # 什么鬼，直接赋值不就好
             self.cipher_iv = iv[:m[1]]
         return m[2](method, key, iv, op)
 
     def encrypt(self, buf):
         if len(buf) == 0:
             return buf
+        # 发送第一个包的时候要发送iv向量给对端
         if self.iv_sent:
             return self.cipher.update(buf)
         else:
@@ -122,6 +128,7 @@ class Encryptor(object):
         if len(buf) == 0:
             return buf
         if self.decipher is None:
+            # 收到第一个包有对端加密向量
             decipher_iv_len = self._method_info[1]
             decipher_iv = buf[:decipher_iv_len]
             self.decipher_iv = decipher_iv

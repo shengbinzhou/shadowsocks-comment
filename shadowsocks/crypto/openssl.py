@@ -76,6 +76,7 @@ class OpenSSLCrypto(object):
             load_openssl()
         cipher_name = common.to_bytes(cipher_name)
         cipher = libcrypto.EVP_get_cipherbyname(cipher_name)
+        # 换个方式加载
         if not cipher:
             cipher = load_cipher(cipher_name)
         if not cipher:
