@@ -1,3 +1,5 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 #!/usr/bin/env python
 #
 # Copyright 2012-2015 clowwindy
@@ -45,7 +47,10 @@ def try_cipher(key, method=None):
 
 
 def EVP_BytesToKey(password, key_len, iv_len):
-    # 生成key 和 iv
+    # 生成key 和 iv，实际是通过m[i-1] + password不断经过md5生成水印
+	# 其中m[i-1]为上一次上一次生成的md5，开始第一次直接使用password
+	# 当生成的所有md5总长度大于 key_len + iv_len时候，取data[:key_len]
+	# 为key,取data[key_len:key_len+iv_len为iv
     # equivalent to OpenSSL's EVP_BytesToKey() with count 1
     # so that we make the same key and iv as nodejs version
     cached_key = '%s-%d-%d' % (password, key_len, iv_len)
@@ -69,6 +74,11 @@ def EVP_BytesToKey(password, key_len, iv_len):
     return key, iv
 
 
+# 既能加密也能解密，第一次加密的时候，会在数据包头放入加密的iv向量cipher_iv
+# 第一次解密的时候会从包头得到解密的iv向量decipher_iv(就是前者对端放入的加密向量)
+# 通过key(由密码通过多次md5生成)+iv加密与解密，密码是预共享的，而iv在第一次传输
+# 的时候包含在数据头部，同时两端都知道iv向量的长度，因此两端都知道对方的key与iv
+# 参考 http://www.cnblogs.com/UnGeek/p/5831883.html
 class Encryptor(object):
     def __init__(self, password, method):
         self.password = password
@@ -148,12 +158,14 @@ def gen_key_iv(password, method):
         key, _ = EVP_BytesToKey(password, key_len, iv_len)
     else:
         key = password
+    # 随机向量
     iv = random_string(iv_len)
     return key, iv, m
 
 
 def encrypt_all_m(key, iv, m, method, data):
     result = []
+    # 头部是向量
     result.append(iv)
     cipher = m(method, key, iv, 1)
     result.append(cipher.update(data))
@@ -169,6 +181,7 @@ def dencrypt_all(password, method, data):
         key, _ = EVP_BytesToKey(password, key_len, iv_len)
     else:
         key = password
+    # 数据中包含有iv
     iv = data[:iv_len]
     data = data[iv_len:]
     cipher = m(method, key, iv, 0)
@@ -186,9 +199,11 @@ def encrypt_all(password, method, op, data):
     else:
         key = password
     if op:
+        # 加密的数据头放入向量
         iv = random_string(iv_len)
         result.append(iv)
     else:
+        # 解密的时候，数据头部是向量，后面是数据
         iv = data[:iv_len]
         data = data[iv_len:]
     cipher = m(method, key, iv, op)

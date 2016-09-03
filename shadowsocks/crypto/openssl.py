@@ -68,9 +68,9 @@ def load_cipher(cipher_name):
         return cipher()
     return None
 
-
 class OpenSSLCrypto(object):
     def __init__(self, cipher_name, key, iv, op):
+		# 根据op字段决定自己是加密还是解密，只能其一
         self._ctx = None
         if not loaded:
             load_openssl()

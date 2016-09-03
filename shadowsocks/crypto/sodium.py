@@ -79,6 +79,7 @@ class SodiumCrypto(object):
 
         # we can only prepend some padding to make the encryption align to
         # blocks
+        # 区块加密，需要将每个块对齐，计算需要填充的字节
         padding = self.counter % BLOCK_SIZE
         if buf_size < padding + l:
             buf_size = (padding + l) * 2
