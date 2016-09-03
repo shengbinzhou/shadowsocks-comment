@@ -65,7 +65,7 @@ def main():
 
     port_password = config['port_password']
     del config['port_password']
-    # ²»Í¬¶Ë¿Ú¼àÌı
+    # ä¸åŒç«¯å£ç›‘å¬
     for port, password in port_password.items():
         a_config = config.copy()
         a_config['server_port'] = int(port)
@@ -80,18 +80,18 @@ def main():
             logging.warn('received SIGQUIT, doing graceful shutting down..')
             list(map(lambda s: s.close(next_tick=True),
                      tcp_servers + udp_servers))
-        # ÊÕµ½SIGQUITĞÅºÅ£¬¹Ø±ÕËùÓĞ¼àÌı¶Ë¿Ú
+        # æ”¶åˆ°SIGQUITä¿¡å·ï¼Œå…³é—­æ‰€æœ‰ç›‘å¬ç«¯å£
         signal.signal(getattr(signal, 'SIGQUIT', signal.SIGTERM),
                       child_handler)
 
         def int_handler(signum, _):
             sys.exit(1)
-        # ÊÕµ½SIGINTÖ±½ÓÍË³ö
+        # æ”¶åˆ°SIGINTç›´æ¥é€€å‡º
         signal.signal(signal.SIGINT, int_handler)
 
         try:
             loop = eventloop.EventLoop()
-            # Óëloop¹ØÁª
+            # ä¸loopå…³è”
             dns_resolver.add_to_loop(loop)
             list(map(lambda s: s.add_to_loop(loop), tcp_servers + udp_servers))
 
@@ -101,25 +101,25 @@ def main():
             shell.print_exception(e)
             sys.exit(1)
 
-	# ¶à½ø³ÌÄ£Ê½
+    # å¤šè¿›ç¨‹æ¨¡å¼
     if int(config['workers']) > 1:
         if os.name == 'posix':
             children = []
             is_child = False
             for i in range(0, int(config['workers'])):
                 r = os.fork()
-                # ×Ó½ø³ÌÅÜ
+                # å­è¿›ç¨‹è·‘
                 if r == 0:
                     logging.info('worker started')
                     is_child = True
                     run_server()
                     break
                 else:
-                    children.append(r) # Ìí¼Óµ½¸¸½ø³Ì
+                    children.append(r) # æ·»åŠ åˆ°çˆ¶è¿›ç¨‹
             if not is_child:
-            	# ¸¸½ø³ÌÅÜÏÂÀ´
+                # çˆ¶è¿›ç¨‹è·‘ä¸‹æ¥
                 def handler(signum, _):
-                	# Ö÷½ø³ÌÊÕµ½ÖĞ¶Ï£¬É±ËÀËùÓĞ×Ó½ø³Ì
+                    # ä¸»è¿›ç¨‹æ”¶åˆ°ä¸­æ–­ï¼Œæ€æ­»æ‰€æœ‰å­è¿›ç¨‹
                     for pid in children:
                         try:
                             os.kill(pid, signum)
@@ -137,14 +137,14 @@ def main():
                 for a_udp_server in udp_servers:
                     a_udp_server.close()
                 dns_resolver.close()
-				# µÈ´ıËùÓĞ×Ó½ø³Ì½áÊø
+                # ç­‰å¾…æ‰€æœ‰å­è¿›ç¨‹ç»“æŸ
                 for child in children:
                     os.waitpid(child, 0)
         else:
             logging.warn('worker is only available on Unix/Linux')
             run_server()
     else:
-        run_server() # µ¥½ø³ÌÅÜ
+        run_server() # å•è¿›ç¨‹è·‘
 
 
 if __name__ == '__main__':

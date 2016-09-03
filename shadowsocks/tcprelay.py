@@ -351,13 +351,14 @@ class TCPRelayHandler(object):
                           self._client_address[0], self._client_address[1]))
             if self._is_local is False:
                 # spec https://shadowsocks.org/en/spec/one-time-auth.html
+                # 验证ota正确性
                 if self._ota_enable or addrtype & ADDRTYPE_AUTH:
                     self._ota_enable = True
                     if len(data) < header_length + ONETIMEAUTH_BYTES:
                         logging.warn('one time auth header is too short')
                         return None
                     offset = header_length + ONETIMEAUTH_BYTES
-                    # header后的一段hash值, 10字节
+                    # header后的一段hash值, 10字节one-time-auth
                     _hash = data[header_length: offset]
                     _data = data[:header_length]
                     # iv+key
