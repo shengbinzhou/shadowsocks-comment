@@ -82,11 +82,16 @@ def EVP_BytesToKey(password, key_len, iv_len):
 class Encryptor(object):
     def __init__(self, password, method):
         self.password = password
+        # 与密码关联生成的
         self.key = None
         self.method = method
+        # 用于标示是否已经发送iv向量
         self.iv_sent = False
         self.cipher_iv = b''
         self.decipher = None
+        # 解密向量对应对端的加密向量，反之加密向量一样，可以看到encrypt和decrypt函数
+        # 在发送第一个数据包的时候，encrypt首先要在数据头部加入cipher_iv，在收到第一个
+        # 数据包的时候，decrypt要先取出decipher_iv
         self.decipher_iv = None
         method = method.lower()
         self._method_info = self.get_method_info(method)

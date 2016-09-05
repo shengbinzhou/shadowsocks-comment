@@ -254,6 +254,8 @@ class TCPRelayHandler(object):
         return True
 
     def _handle_stage_connecting(self, data):
+        # 客户端读取web数据进行ota生成，服务器获取客户端数据，进行ota校验
+        # upstream数据才进行ota，downstream不进行ota
         # 收到local_sock数据，放到data_to_write_to_remote
         if self._is_local:
             # 客户端接收到浏览器的数据要加密
@@ -284,6 +286,7 @@ class TCPRelayHandler(object):
                 # tcp 直接sendto
                 s = remote_sock.sendto(data, MSG_FASTOPEN,
                                        self._chosen_server)
+                # 处理没法送完的包
                 if s < l:
                     data = data[s:]
                     self._data_to_write_to_remote = [data]
@@ -395,10 +398,12 @@ class TCPRelayHandler(object):
             else:
                 # 服务端
                 if self._ota_enable:
+                    # 过滤前面的远程地址和ota hmac-sha1头
                     data = data[header_length:]
                     self._ota_chunk_data(data,
                                          self._data_to_write_to_remote.append)
                 elif len(data) > header_length:
+                    # 过滤掉头部还有数据要发送
                     self._data_to_write_to_remote.append(data[header_length:])
                 # notice here may go into _handle_dns_resolved directly
                 # 解析dns之后remote_sock连接远端web站点
@@ -483,24 +488,42 @@ class TCPRelayHandler(object):
 
     def _ota_chunk_data(self, data, data_cb):
         # spec https://shadowsocks.org/en/spec/one-time-auth.html
+        # 前面数据是 len + hac-sha1，这里就是处理粘包情况，每个数据头
+        # 都有一个len字段表示这段数据的长度，每个数据包都有一个hmac-sha1
+        # hmac-sha1是iv+包序列号计算得到
+        # +----------+-----------+----------+----
+        # | DATA.LEN | HMAC - SHA1 | DATA | ...
+        # +----------+-----------+----------+----
+        # | 2 | 10 | Variable | ...
+        # +----------+-----------+----------+----
         while len(data) > 0:
             if self._ota_len == 0:
                 # get DATA.LEN + HMAC-SHA1
+                # 总共12字节，2字节长度，10字节hmac-sha1，这里是取得
+                # len和hmac-sha1，赋值给ota_len
                 length = ONETIMEAUTH_CHUNK_BYTES - len(self._ota_buff_head)
+                # 去后面的数据，length字段超过len(data)也没关系，python列表的data[:len]超过len(data)
+                # 只会得到len(data)大小的数据
                 self._ota_buff_head += data[:length]
                 data = data[length:]
+                # 还没完整取得整个包头
                 if len(self._ota_buff_head) < ONETIMEAUTH_CHUNK_BYTES:
                     # wait more data
                     return
+                # 得到data.len
                 data_len = self._ota_buff_head[:ONETIMEAUTH_CHUNK_DATA_LEN]
                 self._ota_len = struct.unpack('>H', data_len)[0]
+            # 开始取数据
             length = min(self._ota_len, len(data))
             self._ota_buff_data += data[:length]
             data = data[length:]
+            # 得到一个完整数据包，开始校验 hmac-ha1
             if len(self._ota_buff_data) == self._ota_len:
                 # get a chunk data
+                # 跨过2字节len
                 _hash = self._ota_buff_head[ONETIMEAUTH_CHUNK_DATA_LEN:]
                 _data = self._ota_buff_data
+                # 计数器 iv+counter作为key
                 index = struct.pack('>I', self._ota_chunk_idx)
                 key = self._encryptor.decipher_iv + index
                 if onetimeauth_verify(_hash, _data, key) is False:
@@ -514,6 +537,7 @@ class TCPRelayHandler(object):
         return
 
     def _ota_chunk_data_gen(self, data):
+        # 产生数据包，len+hmac-sha1+data
         data_len = struct.pack(">H", len(data))
         index = struct.pack('>I', self._ota_chunk_idx)
         key = self._encryptor.cipher_iv + index
@@ -628,6 +652,7 @@ class TCPRelayHandler(object):
             self.destroy()
             return
         self._update_activity(len(data))
+        # 注意，往local发送的数据不经过ota
         if self._is_local:
             # 服务器的数据经过加密，客户端进行解密
             data = self._encryptor.decrypt(data)
