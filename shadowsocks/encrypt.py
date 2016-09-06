@@ -48,9 +48,9 @@ def try_cipher(key, method=None):
 
 def EVP_BytesToKey(password, key_len, iv_len):
     # 生成key 和 iv，实际是通过m[i-1] + password不断经过md5生成水印
-	# 其中m[i-1]为上一次上一次生成的md5，开始第一次直接使用password
-	# 当生成的所有md5总长度大于 key_len + iv_len时候，取data[:key_len]
-	# 为key,取data[key_len:key_len+iv_len为iv
+    # 其中m[i-1]为上一次上一次生成的md5，开始第一次直接使用password
+    # 当生成的所有md5总长度大于 key_len + iv_len时候，取data[:key_len]
+    # 为key,取data[key_len:key_len+iv_len为iv
     # equivalent to OpenSSL's EVP_BytesToKey() with count 1
     # so that we make the same key and iv as nodejs version
     cached_key = '%s-%d-%d' % (password, key_len, iv_len)
@@ -178,6 +178,7 @@ def encrypt_all_m(key, iv, m, method, data):
 
 
 def dencrypt_all(password, method, data):
+    # 给udp解密用的
     result = []
     method = method.lower()
     (key_len, iv_len, m) = method_supported[method]

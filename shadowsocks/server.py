@@ -72,6 +72,7 @@ def main():
         a_config['password'] = password
         logging.info("starting server at %s:%d" %
                      (a_config['server'], int(port)))
+        # tcp 与 udp 对应
         tcp_servers.append(tcprelay.TCPRelay(a_config, dns_resolver, False))
         udp_servers.append(udprelay.UDPRelay(a_config, dns_resolver, False))
 

@@ -80,7 +80,7 @@ def client_key(source_addr, server_af):
     # notice this is server af, not dest af
     return '%s:%s:%d' % (source_addr[0], source_addr[1], server_af)
 
-
+# 这里的UDPRelay只负责转发udp数据包，丢包检测由两端应用负责
 class UDPRelay(object):
     def __init__(self, config, dns_resolver, is_local, stat_callback=None):
         self._config = config
@@ -103,10 +103,13 @@ class UDPRelay(object):
         else:
             self._one_time_auth_enable = False
         self._is_local = is_local
+        # 地址到socket的映射
         self._cache = lru_cache.LRUCache(timeout=config['timeout'],
                                          close_callback=self._close_client)
+        # client上行upstream发送的地址
         self._client_fd_to_server_addr = \
             lru_cache.LRUCache(timeout=config['timeout'])
+        # 服务器地址到socket.getaddrinfo的映射，上行upstream的dns
         self._dns_cache = lru_cache.LRUCache(timeout=300)
         self._eventloop = None
         self._closed = False
@@ -125,12 +128,14 @@ class UDPRelay(object):
         server_socket = socket.socket(af, socktype, proto)
         server_socket.bind((self._listen_addr, self._listen_port))
         server_socket.setblocking(False)
+        # udp监听
         self._server_socket = server_socket
         self._stat_callback = stat_callback
 
     def _get_a_server(self):
         server = self._config['server']
         server_port = self._config['server_port']
+        # 随机选择服务器和端口
         if type(server_port) == list:
             server_port = random.choice(server_port)
         if type(server) == list:
@@ -162,8 +167,10 @@ class UDPRelay(object):
                 logging.warn('UDP drop a message since frag is not 0')
                 return
             else:
+                # RSV and FRAG are dropped
                 data = data[3:]
         else:
+            # 服务器解密
             data, key, iv = encrypt.dencrypt_all(self._password,
                                                  self._method,
                                                  data)
@@ -173,14 +180,19 @@ class UDPRelay(object):
                     'UDP handle_server: data is empty after decrypt'
                 )
                 return
+        # +------+---------------------+------------------+----------+-----------+
+        # | ATYP | Destination Address | Destination Port | DATA | HMAC - SHA1 |
+        # +------+---------------------+------------------+----------+-----------+
+        # | 1 | Variable | 2 | Variable | 10 |
+        # +------+---------------------+------------------+----------+-----------+
         header_result = parse_header(data)
         if header_result is None:
             return
         addrtype, dest_addr, dest_port, header_length = header_result
-
         if self._is_local:
             server_addr, server_port = self._get_a_server()
         else:
+            # 服务端拆包，ota验证
             server_addr, server_port = dest_addr, dest_port
             # spec https://shadowsocks.org/en/spec/one-time-auth.html
             if self._one_time_auth_enable or addrtype & ADDRTYPE_AUTH:
@@ -188,6 +200,7 @@ class UDPRelay(object):
                 if len(data) < header_length + ONETIMEAUTH_BYTES:
                     logging.warn('UDP one time auth header is too short')
                     return
+                # 尾巴的hmac-sha1
                 _hash = data[-ONETIMEAUTH_BYTES:]
                 data = data[: -ONETIMEAUTH_BYTES]
                 _key = iv + key
@@ -196,6 +209,7 @@ class UDPRelay(object):
                     return
         addrs = self._dns_cache.get(server_addr, None)
         if addrs is None:
+            # 同步查询DNS
             addrs = socket.getaddrinfo(server_addr, server_port, 0,
                                        socket.SOCK_DGRAM, socket.SOL_UDP)
             if not addrs:
@@ -208,6 +222,7 @@ class UDPRelay(object):
         key = client_key(r_addr, af)
         client = self._cache.get(key, None)
         if not client:
+            # 创建client socket
             # TODO async getaddrinfo
             if self._forbidden_iplist:
                 if common.to_str(sa[0]) in self._forbidden_iplist:
@@ -218,12 +233,14 @@ class UDPRelay(object):
             client = socket.socket(af, socktype, proto)
             client.setblocking(False)
             self._cache[key] = client
+            # 记录数据要返回给谁
             self._client_fd_to_server_addr[client.fileno()] = r_addr
 
             self._sockets.add(client.fileno())
             self._eventloop.add(client, eventloop.POLL_IN, self)
 
         if self._is_local:
+            # 客户端 ota数据生成，然后加密
             key, iv, m = encrypt.gen_key_iv(self._password, self._method)
             # spec https://shadowsocks.org/en/spec/one-time-auth.html
             if self._one_time_auth_enable:
@@ -232,10 +249,12 @@ class UDPRelay(object):
             if not data:
                 return
         else:
+            # 服务器忽略前面的地址与端口头
             data = data[header_length:]
         if not data:
             return
         try:
+            # 数据上行upstream
             client.sendto(data, (server_addr, server_port))
         except IOError as e:
             err = eventloop.errno_from_exception(e)
@@ -256,12 +275,14 @@ class UDPRelay(object):
             if addrlen > 255:
                 # drop
                 return
+            # 服务端加密后下行数据downstream
             data = pack_addr(r_addr[0]) + struct.pack('>H', r_addr[1]) + data
             response = encrypt.encrypt_all(self._password, self._method, 1,
                                            data)
             if not response:
                 return
         else:
+            # 解密数据，名字虽然都是encrypt_all但是op参数为0表示解密
             data = encrypt.encrypt_all(self._password, self._method, 0,
                                        data)
             if not data:
@@ -307,6 +328,7 @@ class UDPRelay(object):
             self._handle_client(sock)
 
     def handle_periodic(self):
+        # 定时调用更新lru_cache
         if self._closed:
             if self._server_socket:
                 self._server_socket.close()
