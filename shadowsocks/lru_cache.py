@@ -38,8 +38,11 @@ class LRUCache(collections.MutableMapping):
         self.timeout = timeout
         self.close_callback = close_callback
         self._store = {}
+        # 某个时间点访问了哪些key，以time.time()作为索引
         self._time_to_keys = collections.defaultdict(list)
+        # 某个key最后访问的时间
         self._keys_to_last_time = {}
+        # 访问的时间点队列，每次访问都往此队列添加时间点，相当于访问的历史时间点
         self._last_visits = collections.deque()
         self._closed_values = set()
         self.update(dict(*args, **kwargs))  # use the free update to set keys
@@ -77,17 +80,22 @@ class LRUCache(collections.MutableMapping):
         c = 0
         while len(self._last_visits) > 0:
             least = self._last_visits[0]
+            # 最早访问的在队列头
             if now - least <= self.timeout:
                 break
+            # 有通知回调，需要调用此回调通知用户
             if self.close_callback is not None:
                 for key in self._time_to_keys[least]:
                     if key in self._store:
+                        # 确认该时间点访问的key是否已经超时
                         if now - self._keys_to_last_time[key] > self.timeout:
                             value = self._store[key]
                             if value not in self._closed_values:
                                 self.close_callback(value)
+                                # 防止重复回调通知
                                 self._closed_values.add(value)
             self._last_visits.popleft()
+            # 清楚节点
             for key in self._time_to_keys[least]:
                 if key in self._store:
                     if now - self._keys_to_last_time[key] > self.timeout:
