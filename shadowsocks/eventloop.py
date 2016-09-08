@@ -31,8 +31,8 @@ from collections import defaultdict
 
 from shadowsocks import shell
 
-# ÊÂ¼þÑ­»·£¬Ã»Ê²Ã´ºÃ½âÊÍµÄ£¬ºÍlibeventÍ¬Ò»Ì×¶«Î÷
-# ½Ó¿Ú°ü×°£¬selectºÍepollÁ½Ì×Í³Ò»½Ó¿Ú
+# äº‹ä»¶å¾ªçŽ¯ï¼Œæ²¡ä»€ä¹ˆå¥½è§£é‡Šçš„ï¼Œå’ŒlibeventåŒä¸€å¥—ä¸œè¥¿
+# æŽ¥å£åŒ…è£…ï¼Œselectå’Œepollä¸¤å¥—ç»Ÿä¸€æŽ¥å£
 __all__ = ['EventLoop', 'POLL_NULL', 'POLL_IN', 'POLL_OUT', 'POLL_ERR',
            'POLL_HUP', 'POLL_NVAL', 'EVENT_NAMES']
 
@@ -208,7 +208,7 @@ class EventLoop(object):
                     import traceback
                     traceback.print_exc()
                     continue
-			# ¿ªÊ¼»Øµ÷
+            # å¼€å§‹å›žè°ƒ
             for sock, fd, event in events:
                 handler = self._fdmap.get(fd, None)
                 if handler is not None:
@@ -217,7 +217,7 @@ class EventLoop(object):
                         handler.handle_event(sock, fd, event)
                     except (OSError, IOError) as e:
                         shell.print_exception(e)
-            # »Øµ÷¶¨Ê±ÈÎÎñ
+            # å›žè°ƒå®šæ—¶ä»»åŠ¡
             now = time.time()
             if asap or now - self._last_time >= TIMEOUT_PRECISION:
                 for callback in self._periodic_callbacks:

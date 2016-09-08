@@ -87,6 +87,7 @@ def build_address(address):
 
 
 def build_request(address, qtype):
+    # 构建dns查询请求包
     request_id = os.urandom(2)
     header = struct.pack('!BBHHHH', 1, 0, 1, 0, 0, 0)
     addr = build_address(address)
@@ -184,6 +185,7 @@ def parse_header(data):
 
 
 def parse_response(data):
+    # 解析一个响应包
     try:
         if len(data) >= 12:
             header = parse_header(data)
@@ -250,8 +252,10 @@ class DNSResolver(object):
 
     def __init__(self, server_list=None, prefer_ipv6=False):
         self._loop = None
+        # hostname 到ip的映射
         self._hosts = {}
         self._hostname_status = {}
+        # hostname 对应callback列表
         self._hostname_to_cb = {}
         self._cb_to_hostname = {}
         self._cache = lru_cache.LRUCache(timeout=300)
@@ -271,6 +275,7 @@ class DNSResolver(object):
 
     def _parse_resolv(self):
         self._servers = []
+        # 获取系统默认dns服务器地址
         try:
             with open('/etc/resolv.conf', 'rb') as f:
                 content = f.readlines()
@@ -328,8 +333,10 @@ class DNSResolver(object):
             if ip or error:
                 callback((hostname, ip), error)
             else:
+                # 解析不成功
                 callback((hostname, None),
                          Exception('unknown hostname %s' % hostname))
+        # 清理对应的请求回调
         if hostname in self._hostname_to_cb:
             del self._hostname_to_cb[hostname]
         if hostname in self._hostname_status:
@@ -347,16 +354,19 @@ class DNSResolver(object):
                     break
             if not ip and self._hostname_status.get(hostname, STATUS_SECOND) \
                     == STATUS_FIRST:
+                # 尝试解析ipv6
                 self._hostname_status[hostname] = STATUS_SECOND
                 self._send_req(hostname, self._QTYPES[1])
             else:
                 if ip:
+                    # 解析成功，回调通知
                     self._cache[hostname] = ip
                     self._call_callback(hostname, ip)
                 elif self._hostname_status.get(hostname, None) \
                         == STATUS_SECOND:
                     for question in response.questions:
                         if question[1] == self._QTYPES[1]:
+                            # 通知解析不成功
                             self._call_callback(hostname, None)
                             break
 
@@ -364,6 +374,7 @@ class DNSResolver(object):
         if sock != self._sock:
             return
         if event & eventloop.POLL_ERR:
+            # socket错误重新设置
             logging.error('dns socket err')
             self._loop.remove(self._sock)
             self._sock.close()
@@ -390,18 +401,21 @@ class DNSResolver(object):
             if arr:
                 arr.remove(callback)
                 if not arr:
+                    # 列表为空
                     del self._hostname_to_cb[hostname]
                     if hostname in self._hostname_status:
                         del self._hostname_status[hostname]
 
     def _send_req(self, hostname, qtype):
         req = build_request(hostname, qtype)
+        # 每个服务器都发
         for server in self._servers:
             logging.debug('resolving %s with type %d using server %s',
                           hostname, qtype, server)
             self._sock.sendto(req, (server, 53))
 
     def resolve(self, hostname, callback):
+        # 解析hostname，完成之后callback通知
         if type(hostname) != bytes:
             hostname = hostname.encode('utf8')
         if not hostname:
