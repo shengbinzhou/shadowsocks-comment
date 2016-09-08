@@ -443,6 +443,7 @@ class DNSResolver(object):
             else:
                 arr.append(callback)
                 # TODO send again only if waited too long
+                # 没有做解析超时处理
                 self._send_req(hostname, self._QTYPES[0])
 
     def close(self):

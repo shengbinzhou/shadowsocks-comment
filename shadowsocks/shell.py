@@ -142,7 +142,7 @@ def get_config(is_local):
     try:
         config_path = find_config()
         optlist, args = getopt.getopt(sys.argv[1:], shortopts, longopts)
-        # ÏÈ½âÎöÃüÁîĞĞÉèÖÃµÄÅäÖÃÎÄ¼ş£¬ÃüÁîĞĞÓÅÏÈ¼¶±È½Ï´ó£¬»á¸²¸ÇÅäÖÃÎÄ¼ş
+        # å…ˆè§£æå‘½ä»¤è¡Œè®¾ç½®çš„é…ç½®æ–‡ä»¶ï¼Œå‘½ä»¤è¡Œä¼˜å…ˆçº§æ¯”è¾ƒå¤§ï¼Œä¼šè¦†ç›–é…ç½®æ–‡ä»¶
         for key, value in optlist:
             if key == '-c':
                 config_path = value
