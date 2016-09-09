@@ -788,9 +788,13 @@ class TCPRelay(object):
         self._fd_to_handlers = {}
 
         self._timeout = config['timeout']
+        # 每一个handler都会在队列中，根据active_time排序
+        # 队列中可能有的元素为空（handler从TCPRelay删除）
+        # _timeout_offset之前的元素为None
         self._timeouts = []  # a list for all the handlers
         # we trim the timeouts once a while
         self._timeout_offset = 0   # last checked position for timeout
+        # 用于映射handler在_timeouts中的下标
         self._handler_to_timeouts = {}  # key: handler value: index in timeouts
 
         # 根据自己是客户端还是服务器创建监听端口
@@ -843,7 +847,9 @@ class TCPRelay(object):
             del self._handler_to_timeouts[hash(handler)]
 
     def update_activity(self, handler, data_len):
-        # 激活handler的活动时间
+        # 激活handler的活动时间，从self._timeouts中删除
+        # handler，设置handler最近活动时间为当前时间，重新
+        # 添加到超时队列尾部
         if data_len and self._stat_callback:
             self._stat_callback(self._listen_port, data_len)
 
